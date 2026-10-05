@@ -1,6 +1,6 @@
 import { io } from "socket.io-client";
 
-const SOCKET_URL = "http://localhost:5000";
+const SOCKET_URL = "https://watchup-rs17.onrender.com";
 
 export const createMeetingConnection = () => {
   return io(SOCKET_URL);
