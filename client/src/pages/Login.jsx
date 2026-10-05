@@ -22,14 +22,14 @@ const Login = ({ mode = "login" }) => {
             routing="path"
             path="/register"
             signInUrl="/login"
-            forceRedirectUrl="/dashboard"
+            fallbackRedirectUrl="/dashboard"
           />
         ) : (
           <SignIn
             routing="path"
             path="/login"
             signUpUrl="/register"
-            forceRedirectUrl="/dashboard"
+            fallbackRedirectUrl="/dashboard"
           />
         )}
       </div>
