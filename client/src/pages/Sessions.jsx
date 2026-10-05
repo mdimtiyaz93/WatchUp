@@ -2,8 +2,7 @@ import React, { useEffect, useState } from "react";
 import { CalendarDaysIcon, ClockIcon, VideoIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useUser } from "@clerk/react";
-
-const API_URL = "http://localhost:5000";
+const API_URL = "https://watchup-rs17.onrender.com";
 
 const ROOM_EXPIRY = 2 * 60 * 60 * 1000;
 
