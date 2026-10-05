@@ -1,0 +1,6 @@
+.env
+backend/.env
+client/.env
+node_modules/
+.vscode/
+dist/
