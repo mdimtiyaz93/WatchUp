@@ -2,9 +2,9 @@ import React, { useEffect, useRef, useState } from "react";
 
 import { useNavigate, useParams } from "react-router-dom";
 
-import { useUser } from "@clerk/react";
+import { useUser, useClerk } from "@clerk/react";
 
-import { CheckIcon, CopyIcon, SendIcon, XIcon } from "lucide-react";
+import { CopyIcon, SendIcon, XIcon } from "lucide-react";
 
 import { io } from "socket.io-client";
 
@@ -12,7 +12,7 @@ import toast from "react-hot-toast";
 
 import MeetingHeader from "../components/watchParty/MeetingHeader";
 
-import YouTubePlayer from "../components/YouTubePlayer";
+import YoutubePlayer from "../components/YoutubePlayer";
 
 import VideoControls from "../components/watchParty/VideoControls";
 
@@ -25,6 +25,8 @@ const MeetingRoom = () => {
 
   const { user } = useUser();
 
+  const { signOut } = useClerk();
+
   const playerRef = useRef(null);
 
   const socketRef = useRef(null);
@@ -35,17 +37,19 @@ const MeetingRoom = () => {
 
   const remoteActionRef = useRef(false);
 
+  const chatRef = useRef(false);
+
   const [videoId, setVideoId] = useState("");
 
   const [videoUrl, setVideoUrl] = useState("");
 
   const [isPlaying, setIsPlaying] = useState(false);
 
-  const [copied, setCopied] = useState(false);
-
   const [chat, setChat] = useState(false);
 
   const [people, setPeople] = useState(false);
+
+  const [reactionMenu, setReactionMenu] = useState(false);
 
   const [message, setMessage] = useState("");
 
@@ -56,6 +60,10 @@ const MeetingRoom = () => {
   const [socketConnected, setSocketConnected] = useState(false);
 
   const [actionRequests, setActionRequests] = useState([]);
+
+  const [unreadMessages, setUnreadMessages] = useState(0);
+
+  const [reactions, setReactions] = useState([]);
 
   const userName =
     user?.fullName ||
@@ -90,6 +98,10 @@ const MeetingRoom = () => {
   useEffect(() => {
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
+
+  useEffect(() => {
+    chatRef.current = chat;
+  }, [chat]);
 
   useEffect(() => {
     if (!meetingId) return;
@@ -168,13 +180,9 @@ const MeetingRoom = () => {
 
       socket.emit("sync_response", {
         roomId: meetingId,
-
         requesterId,
-
         videoId: videoIdRef.current,
-
         currentTime: time,
-
         playState: isPlayingRef.current ? "playing" : "paused",
       });
     });
@@ -229,7 +237,7 @@ const MeetingRoom = () => {
       }
 
       if (data?.username && data?.userId !== socket.id) {
-        toast.success(`${data.username} Added`);
+        toast.success(`${data.username} Joined`);
       }
     });
 
@@ -238,6 +246,10 @@ const MeetingRoom = () => {
 
       if (data?.participants) {
         setParticipants(makeParticipants(data.participants, socket.id));
+      }
+
+      if (data?.username && data?.userId !== socket.id) {
+        toast.error(`${data.username} Left`);
       }
     });
 
@@ -345,6 +357,22 @@ const MeetingRoom = () => {
       console.log("Received chat:", data);
 
       setMessages((prev) => [...prev, data]);
+
+      if (!chatRef.current) {
+        setUnreadMessages((prev) => prev + 1);
+      }
+    });
+
+    socket.on("reaction", (data) => {
+      console.log("Reaction received:", data);
+
+      setReactions((prev) => [...prev, data]);
+
+      setTimeout(() => {
+        setReactions((prev) =>
+          prev.filter((reaction) => reaction.id !== data.id),
+        );
+      }, 3000);
     });
 
     socket.on("action_request", (data) => {
@@ -415,19 +443,14 @@ const MeetingRoom = () => {
 
     console.log("REQUEST ACTION:", {
       action,
-
       data,
-
       myRole: me?.role,
-
       canControl,
     });
 
     socketRef.current?.emit("request_action", {
       roomId: meetingId,
-
       action,
-
       data,
     });
 
@@ -447,19 +470,12 @@ const MeetingRoom = () => {
   const approveRequest = (request) => {
     if (!isHost) return;
 
-    console.log("APPROVING REQUEST:", request);
-
     socketRef.current?.emit("approve_request", {
       roomId: meetingId,
-
       requestId: request.requestId,
-
       userId: request.userId,
-
       action: request.action,
-
       data: request.data,
-
       approved: true,
     });
 
@@ -471,19 +487,12 @@ const MeetingRoom = () => {
   const rejectRequest = (request) => {
     if (!isHost) return;
 
-    console.log("REJECTING REQUEST:", request);
-
     socketRef.current?.emit("approve_request", {
       roomId: meetingId,
-
       requestId: request.requestId,
-
       userId: request.userId,
-
       action: request.action,
-
       data: request.data,
-
       approved: false,
     });
 
@@ -521,7 +530,6 @@ const MeetingRoom = () => {
 
     socketRef.current?.emit("change_video", {
       roomId: meetingId,
-
       videoId: id,
     });
 
@@ -553,7 +561,6 @@ const MeetingRoom = () => {
 
     socketRef.current?.emit("play", {
       roomId: meetingId,
-
       currentTime,
     });
 
@@ -583,7 +590,6 @@ const MeetingRoom = () => {
 
     socketRef.current?.emit("pause", {
       roomId: meetingId,
-
       currentTime,
     });
 
@@ -609,7 +615,6 @@ const MeetingRoom = () => {
 
     socketRef.current?.emit("seek", {
       roomId: meetingId,
-
       time,
     });
 
@@ -647,7 +652,6 @@ const MeetingRoom = () => {
 
     socketRef.current?.emit("change_video", {
       roomId: meetingId,
-
       videoId: id,
     });
 
@@ -664,21 +668,13 @@ const MeetingRoom = () => {
     });
   };
 
-  const copyLink = async () => {
+  const copyMeetingCode = async () => {
     try {
-      await navigator.clipboard.writeText(
-        `${window.location.origin}/meeting/${meetingId}`,
-      );
+      await navigator.clipboard.writeText(meetingId);
 
-      setCopied(true);
-
-      toast.success("Meeting link copied");
-
-      setTimeout(() => {
-        setCopied(false);
-      }, 2000);
-    } catch {
-      toast.error("Unable to copy meeting link");
+      toast.success("Meeting code copied!");
+    } catch (error) {
+      toast.error("Failed to copy code");
     }
   };
 
@@ -689,13 +685,23 @@ const MeetingRoom = () => {
 
     socketRef.current?.emit("chat-message", {
       roomId: meetingId,
-
       username: userName,
-
       message: message.trim(),
     });
 
     setMessage("");
+  };
+
+  const sendReaction = (reaction) => {
+    if (!reaction) return;
+
+    socketRef.current?.emit("reaction", {
+      roomId: meetingId,
+      username: userName,
+      reaction,
+    });
+
+    setReactionMenu(false);
   };
 
   const changeRole = (participantId, role) => {
@@ -703,9 +709,7 @@ const MeetingRoom = () => {
 
     socketRef.current?.emit("assign_role", {
       roomId: meetingId,
-
       userId: participantId,
-
       role,
     });
   };
@@ -715,7 +719,6 @@ const MeetingRoom = () => {
 
     socketRef.current?.emit("remove_participant", {
       roomId: meetingId,
-
       userId: participantId,
     });
   };
@@ -725,100 +728,111 @@ const MeetingRoom = () => {
 
     socketRef.current?.emit("transfer_host", {
       roomId: meetingId,
-
       userId: participantId,
     });
   };
 
-  const leaveRoom = () => {
+  const leaveRoom = async () => {
     socketRef.current?.emit("leave_room", {
       roomId: meetingId,
     });
 
     socketRef.current?.disconnect();
 
-    navigate("/dashboard");
+    await signOut();
+
+    navigate("/login");
   };
 
   const toggleChat = () => {
-    setChat(true);
+    setChat((prev) => {
+      const next = !prev;
+
+      if (next) {
+        setUnreadMessages(0);
+      }
+
+      return next;
+    });
 
     setPeople(false);
+
+    setReactionMenu(false);
   };
 
   const togglePeople = () => {
-    setPeople(true);
+    setPeople((prev) => !prev);
 
     setChat(false);
+
+    setReactionMenu(false);
+  };
+
+  const toggleReaction = () => {
+    setReactionMenu((prev) => !prev);
+
+    setChat(false);
+
+    setPeople(false);
   };
 
   return (
     <div className="h-screen w-screen bg-slate-100 text-slate-900 flex flex-col overflow-hidden relative">
       <MeetingHeader />
 
-      <main className="flex-1 flex items-center justify-center px-4 pt-16 pb-24 overflow-y-auto">
-        <div className="w-full max-w-4xl">
-          <div className="bg-white rounded-xl p-3 shadow-sm border border-slate-200">
-            <form
-              onSubmit={loadVideo}
-              className="relative z-[100] flex gap-2 mb-3"
-            >
-              <input
-                value={videoUrl}
-                onChange={(e) => setVideoUrl(e.target.value)}
-                placeholder="Paste YouTube URL"
-                disabled={!canControl}
-                className="relative z-[100] flex-1 border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed"
-              />
-
-              <button
-                type="submit"
-                disabled={!canControl}
-                className="relative z-[100] bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed"
+      <main className="flex-1 flex items-center justify-center px-3 pt-16 pb-24 overflow-y-auto">
+        <div className="w-full max-w-3xl">
+          <div className="bg-white rounded-xl p-2.5 shadow-sm border border-slate-200">
+            {!chat && !people && !reactionMenu && (
+              <form
+                onSubmit={loadVideo}
+                className="relative z-[100] flex gap-1.5 mb-2"
               >
-                Load
-              </button>
-            </form>
+                <input
+                  value={videoUrl}
+                  onChange={(e) => setVideoUrl(e.target.value)}
+                  placeholder="Paste YouTube URL"
+                  disabled={!canControl}
+                  className="relative z-[100] flex-1 min-w-0 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-primary disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed"
+                />
 
-            <div className="w-full max-w-3xl mx-auto">
-              <YouTubePlayer
+                <button
+                  type="submit"
+                  disabled={!canControl}
+                  className="relative z-[100] bg-primary text-white px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer disabled:bg-gray-400 disabled:cursor-not-allowed"
+                >
+                  Load
+                </button>
+              </form>
+            )}
+
+            <div className="w-full max-w-2xl mx-auto">
+              <YoutubePlayer
                 ref={playerRef}
                 videoId={videoId}
                 canControl={canControl}
                 onStateChange={(state) => {
                   setIsPlaying(state === "playing");
 
-                  if (remoteActionRef.current) {
-                    return;
-                  }
+                  if (remoteActionRef.current) return;
 
-                  if (!canControl) {
-                    return;
-                  }
+                  if (!canControl) return;
 
-                  if (!videoIdRef.current) {
-                    return;
-                  }
+                  if (!videoIdRef.current) return;
 
                   const currentTime =
                     playerRef.current?.getCurrentTime?.() || 0;
 
                   if (state === "playing") {
-                    console.log("HOST NATIVE PLAY:", currentTime);
-
                     socketRef.current?.emit("play", {
                       roomId: meetingId,
-
                       currentTime,
                     });
                   }
 
                   if (state === "paused") {
-                    console.log("HOST NATIVE PAUSE:", currentTime);
-
                     socketRef.current?.emit("pause", {
                       roomId: meetingId,
-
                       currentTime,
                     });
                   }
@@ -826,7 +840,7 @@ const MeetingRoom = () => {
               />
             </div>
 
-            <div className="mt-3">
+            <div className="mt-2">
               <VideoControls
                 isHost={isHost}
                 isModerator={isModerator}
@@ -843,42 +857,51 @@ const MeetingRoom = () => {
         </div>
       </main>
 
-      <div className="absolute bottom-4 left-4 z-30">
-        <div className="bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-sm flex items-center gap-3">
-          <div>
-            <p className="text-[10px] text-slate-500 uppercase">Meeting ID</p>
+      {/* FLOATING REACTIONS */}
+      <div className="absolute bottom-16 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+        <div className="flex flex-col items-center gap-1">
+          {reactions.map((item) => (
+            <div key={item.id} className="text-2xl animate-bounce">
+              {item.reaction}
+            </div>
+          ))}
+        </div>
+      </div>
 
-            <p className="text-xs font-medium">{meetingId}</p>
+      {/* MEETING ID + REQUESTS */}
+      <div className="absolute bottom-3 left-3 z-30">
+        <div className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 shadow-sm flex items-center gap-2">
+          <div>
+            <p className="text-[8px] text-slate-500 uppercase">Meeting ID</p>
+
+            <p className="text-[10px] font-medium">{meetingId}</p>
           </div>
 
           <button
-            onClick={copyLink}
-            className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center cursor-pointer"
+            type="button"
+            onClick={copyMeetingCode}
+            className="w-7 h-7 rounded-md bg-slate-100 flex items-center justify-center cursor-pointer"
           >
-            {copied ? (
-              <CheckIcon className="w-4 h-4 text-emerald-600" />
-            ) : (
-              <CopyIcon className="w-4 h-4 text-slate-600" />
-            )}
+            <CopyIcon className="w-3.5 h-3.5 text-slate-600" />
           </button>
         </div>
 
         {isHost && actionRequests.length > 0 && (
-          <div className="mt-3 w-80 bg-white border border-slate-200 rounded-xl shadow-xl p-3">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-sm">Action Requests</h3>
+          <div className="mt-2 w-72 bg-white border border-slate-200 rounded-lg shadow-xl p-2.5">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="font-semibold text-xs">Action Requests</h3>
 
-              <span className="text-xs bg-primary/10 text-primary px-2 py-1 rounded-full">
+              <span className="text-[10px] bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">
                 {actionRequests.length}
               </span>
             </div>
 
-            <div className="space-y-2 max-h-80 overflow-y-auto">
+            <div className="space-y-1.5 max-h-64 overflow-y-auto">
               {actionRequests.map((request) => (
-                <div key={request.requestId} className="border rounded-lg p-3">
-                  <p className="text-sm font-medium">{request.username}</p>
+                <div key={request.requestId} className="border rounded-lg p-2">
+                  <p className="text-xs font-medium">{request.username}</p>
 
-                  <p className="text-xs text-slate-500 mt-1">
+                  <p className="text-[10px] text-slate-500 mt-1">
                     Requested:{" "}
                     <span className="font-medium">
                       {request.action.replace("_", " ")}
@@ -887,16 +910,16 @@ const MeetingRoom = () => {
 
                   {request.action === "change_video" &&
                     request.data?.videoId && (
-                      <p className="text-xs text-slate-500 mt-1 break-all">
+                      <p className="text-[10px] text-slate-500 mt-1 break-all">
                         Video ID: {request.data.videoId}
                       </p>
                     )}
 
-                  <div className="flex gap-2 mt-3">
+                  <div className="flex gap-1.5 mt-2">
                     <button
                       type="button"
                       onClick={() => approveRequest(request)}
-                      className="flex-1 bg-emerald-50 text-emerald-600 px-2 py-1.5 rounded-lg text-xs font-medium cursor-pointer hover:bg-emerald-100"
+                      className="flex-1 bg-emerald-50 text-emerald-600 px-2 py-1 rounded-md text-[10px] font-medium cursor-pointer hover:bg-emerald-100"
                     >
                       Approve
                     </button>
@@ -904,7 +927,7 @@ const MeetingRoom = () => {
                     <button
                       type="button"
                       onClick={() => rejectRequest(request)}
-                      className="flex-1 bg-red-50 text-red-500 px-2 py-1.5 rounded-lg text-xs font-medium cursor-pointer hover:bg-red-100"
+                      className="flex-1 bg-red-50 text-red-500 px-2 py-1 rounded-md text-[10px] font-medium cursor-pointer hover:bg-red-100"
                     >
                       Reject
                     </button>
@@ -916,94 +939,127 @@ const MeetingRoom = () => {
         )}
       </div>
 
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30">
+      {/* REACTION MENU */}
+      {reactionMenu && (
+        <div className="absolute bottom-14 left-[65%] md:left-1/2 -translate-x-1/2 z-40">
+          <div className="bg-white border border-slate-200 shadow-lg rounded-xl px-2 py-1.5 flex items-center gap-1">
+            {["❤️", "😂", "👍", "😮", "😢", "👏"].map((reaction) => (
+              <button
+                key={reaction}
+                type="button"
+                onClick={() => sendReaction(reaction)}
+                className="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-lg transition cursor-pointer"
+              >
+                {reaction}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* CONTROL BAR */}
+      <div className="absolute bottom-3 left-[65%] md:left-1/2 -translate-x-1/2 z-30">
         <ControlBar
           onChat={toggleChat}
           onParticipants={togglePeople}
-          onCopy={copyLink}
+          onReaction={toggleReaction}
           onLeave={leaveRoom}
           participantCount={participants.length}
+          unreadMessages={unreadMessages}
         />
       </div>
 
+      {/* CHAT */}
       {chat && (
         <div className="absolute top-0 right-0 h-full w-full sm:w-96 bg-white z-50 shadow-2xl border-l flex flex-col">
-          <div className="flex justify-between items-center px-5 py-4 border-b">
-            <h2 className="font-semibold">Chat</h2>
+          <div className="flex justify-between items-center px-4 py-3 border-b">
+            <h2 className="font-semibold text-sm">Chat</h2>
 
-            <button onClick={() => setChat(false)} className="cursor-pointer">
-              <XIcon className="w-5 h-5" />
+            <button
+              type="button"
+              onClick={() => {
+                setChat(false);
+                setUnreadMessages(0);
+              }}
+              className="cursor-pointer"
+            >
+              <XIcon className="w-4 h-4" />
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <div className="flex-1 overflow-y-auto p-3 space-y-2">
             {messages.length ? (
               messages.map((m, index) => (
-                <div key={m.id || index} className="bg-slate-50 rounded-xl p-3">
-                  <p className="text-xs font-semibold">{m.username}</p>
+                <div key={m.id || index} className="bg-slate-50 rounded-lg p-2">
+                  <p className="text-[10px] font-semibold">{m.username}</p>
 
-                  <p className="text-sm text-slate-600 mt-1">{m.message}</p>
+                  <p className="text-xs text-slate-600 mt-1">{m.message}</p>
                 </div>
               ))
             ) : (
-              <p className="text-center text-sm text-slate-400 mt-10">
+              <p className="text-center text-xs text-slate-400 mt-10">
                 No messages yet
               </p>
             )}
           </div>
 
-          <form onSubmit={sendMessage} className="p-4 border-t flex gap-2">
+          <form onSubmit={sendMessage} className="p-3 border-t flex gap-2">
             <input
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               placeholder="Type a message..."
-              className="flex-1 border rounded-xl px-3 py-2 text-sm outline-none"
+              className="flex-1 border rounded-lg px-2.5 py-1.5 text-xs outline-none"
             />
 
             <button
               type="submit"
               disabled={!message.trim()}
-              className="w-10 h-10 rounded-xl bg-primary text-white flex items-center justify-center disabled:opacity-40 cursor-pointer"
+              className="w-8 h-8 rounded-lg bg-primary text-white flex items-center justify-center disabled:opacity-40 cursor-pointer"
             >
-              <SendIcon className="w-4 h-4" />
+              <SendIcon className="w-3.5 h-3.5" />
             </button>
           </form>
         </div>
       )}
 
+      {/* PARTICIPANTS */}
       {people && (
         <div className="absolute top-0 right-0 h-full w-full sm:w-[420px] bg-white z-50 shadow-2xl border-l flex flex-col">
-          <div className="flex justify-between items-center px-5 py-4 border-b">
+          <div className="flex justify-between items-center px-4 py-3 border-b">
             <div>
-              <h2 className="font-semibold">Participants</h2>
+              <h2 className="font-semibold text-sm">Participants</h2>
 
-              <p className="text-xs text-slate-500">
+              <p className="text-[10px] text-slate-500">
                 {participants.length} people
               </p>
             </div>
 
-            <button onClick={() => setPeople(false)} className="cursor-pointer">
-              <XIcon className="w-5 h-5" />
+            <button
+              type="button"
+              onClick={() => setPeople(false)}
+              className="cursor-pointer"
+            >
+              <XIcon className="w-4 h-4" />
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <div className="flex-1 overflow-y-auto p-3 space-y-2">
             {participants.map((p) => (
               <div
                 key={p.id}
-                className="border rounded-xl p-3 flex items-center gap-3"
+                className="border rounded-lg p-2.5 flex items-center gap-2"
               >
-                <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-semibold">
+                <div className="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-semibold">
                   {p.name?.charAt(0)?.toUpperCase() || "U"}
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">
+                  <p className="text-xs font-medium truncate">
                     {p.name || "User"}{" "}
                     {p.isYou && <span className="text-primary">(You)</span>}
                   </p>
 
-                  <span className="text-[10px] bg-slate-100 px-2 py-1 rounded-full">
+                  <span className="text-[9px] bg-slate-100 px-1.5 py-0.5 rounded-full">
                     {p.role || "Participant"}
                   </span>
                 </div>
@@ -1013,7 +1069,7 @@ const MeetingRoom = () => {
                     <select
                       value={p.role || "Participant"}
                       onChange={(e) => changeRole(p.id, e.target.value)}
-                      className="text-xs border rounded-lg px-1.5 py-1"
+                      className="text-[9px] border rounded-md px-1 py-1"
                     >
                       <option value="Participant">Participant</option>
 
@@ -1023,15 +1079,17 @@ const MeetingRoom = () => {
                     </select>
 
                     <button
+                      type="button"
                       onClick={() => transferHost(p.id)}
-                      className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded-lg cursor-pointer"
+                      className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-1 rounded-md cursor-pointer"
                     >
-                      Make Host
+                      Host
                     </button>
 
                     <button
+                      type="button"
                       onClick={() => removeParticipant(p.id)}
-                      className="text-xs bg-red-50 text-red-500 px-2 py-1 rounded-lg cursor-pointer"
+                      className="text-[9px] bg-red-50 text-red-500 px-1.5 py-1 rounded-md cursor-pointer"
                     >
                       Remove
                     </button>

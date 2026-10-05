@@ -3,61 +3,97 @@ import React, {
   useEffect,
   useImperativeHandle,
   useRef,
-  useState,
 } from "react";
 
-const YouTubePlayer = forwardRef(
+const YoutubePlayer = forwardRef(
   ({ videoId, onStateChange, canControl }, ref) => {
     const playerRef = useRef(null);
     const containerRef = useRef(null);
-    const callbackRef = useRef(onStateChange);
 
-    const [ready, setReady] = useState(false);
+    const callbackRef = useRef(onStateChange);
+    const canControlRef = useRef(canControl);
+    const videoIdRef = useRef(videoId);
+    const lastStateRef = useRef(null);
 
     useEffect(() => {
       callbackRef.current = onStateChange;
     }, [onStateChange]);
 
     useEffect(() => {
+      canControlRef.current = canControl;
+    }, [canControl]);
+
+    useEffect(() => {
+      videoIdRef.current = videoId;
+    }, [videoId]);
+
+    useImperativeHandle(ref, () => ({
+      play: () => {
+        playerRef.current?.playVideo?.();
+      },
+
+      pause: () => {
+        playerRef.current?.pauseVideo?.();
+      },
+
+      seek: (time) => {
+        if (!playerRef.current) return;
+
+        playerRef.current.seekTo(Number(time) || 0, true);
+      },
+
+      getCurrentTime: () => {
+        return playerRef.current?.getCurrentTime?.() || 0;
+      },
+    }));
+
+    useEffect(() => {
       if (!videoId) return;
 
+      let destroyed = false;
+
       const createPlayer = () => {
-        if (!containerRef.current || !window.YT?.Player) return;
+        if (destroyed) return;
+        if (!containerRef.current) return;
+        if (!window.YT?.Player) return;
 
         if (playerRef.current) {
           playerRef.current.destroy();
           playerRef.current = null;
         }
 
-        setReady(false);
-
         playerRef.current = new window.YT.Player(containerRef.current, {
-          videoId: videoId,
+          videoId,
 
           playerVars: {
             autoplay: 0,
-            controls: canControl ? 1 : 0,
+            controls: canControlRef.current ? 1 : 0,
             rel: 0,
             modestbranding: 1,
             enablejsapi: 1,
+            playsinline: 1,
+            origin: window.location.origin,
           },
 
           events: {
             onReady: () => {
-              setReady(true);
+              if (destroyed) return;
+
               console.log("YouTube Player Ready:", videoId);
             },
 
             onStateChange: (event) => {
-              console.log("YOUTUBE EVENT:", event.data);
+              if (destroyed) return;
 
               if (event.data === window.YT.PlayerState.PLAYING) {
-                console.log("YOUTUBE PLAYING");
+                lastStateRef.current = "playing";
+
                 callbackRef.current?.("playing");
               }
 
               if (event.data === window.YT.PlayerState.PAUSED) {
-                console.log("YOUTUBE PAUSED");
+                lastStateRef.current = "paused";
+
                 callbackRef.current?.("paused");
               }
             },
@@ -69,19 +105,22 @@ const YouTubePlayer = forwardRef(
         });
       };
 
-      if (window.YT && window.YT.Player) {
+      if (window.YT?.Player) {
         createPlayer();
       } else {
+        const existingScript = document.querySelector(
+          'script[src="https://www.youtube.com/iframe_api"]',
+        );
+
         const oldCallback = window.onYouTubeIframeAPIReady;
 
         window.onYouTubeIframeAPIReady = () => {
           oldCallback?.();
-          createPlayer();
-        };
 
-        const existingScript = document.querySelector(
-          'script[src="https://www.youtube.com/iframe_api"]',
-        );
+          if (!destroyed) {
+            createPlayer();
+          }
+        };
 
         if (!existingScript) {
           const script = document.createElement("script");
@@ -95,51 +134,55 @@ const YouTubePlayer = forwardRef(
       }
 
       return () => {
+        destroyed = true;
+
         if (playerRef.current) {
           playerRef.current.destroy();
           playerRef.current = null;
         }
-
-        setReady(false);
       };
-    }, [videoId, canControl]);
+    }, [videoId]);
 
-    useImperativeHandle(ref, () => ({
-      play: () => {
-        if (!playerRef.current) return;
+    useEffect(() => {
+      const handleVisibilityChange = () => {
+        if (document.visibilityState !== "visible") {
+          return;
+        }
 
-        playerRef.current.playVideo();
-      },
-
-      pause: () => {
-        if (!playerRef.current) return;
-
-        playerRef.current.pauseVideo();
-      },
-
-      seek: (time) => {
         const player = playerRef.current;
 
         if (!player) return;
 
-        if (typeof player.seekTo !== "function") {
-          console.log("YouTube player is not ready for seek");
-          return;
-        }
+        setTimeout(() => {
+          if (!playerRef.current) return;
 
-        player.seekTo(Number(time) || 0, true);
-      },
+          const state = playerRef.current.getPlayerState?.();
 
-      getCurrentTime: () => {
-        if (!playerRef.current) return 0;
+          if (state === window.YT?.PlayerState?.PLAYING) {
+            lastStateRef.current = "playing";
+            callbackRef.current?.("playing");
+          }
 
-        return playerRef.current.getCurrentTime?.() || 0;
-      },
-    }));
+          if (state === window.YT?.PlayerState?.PAUSED) {
+            lastStateRef.current = "paused";
+            callbackRef.current?.("paused");
+          }
+        }, 300);
+      };
+
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+
+      return () => {
+        document.removeEventListener(
+          "visibilitychange",
+          handleVisibilityChange,
+        );
+      };
+    }, []);
 
     if (!videoId) {
       return (
-        <div className="w-full aspect-video bg-black rounded-2xl flex items-center justify-center">
+        <div className="w-full max-w-4xl mx-auto aspect-video bg-black rounded-xl flex items-center justify-center">
           <p className="text-white text-sm sm:text-base">
             Enter a YouTube video URL
           </p>
@@ -148,17 +191,13 @@ const YouTubePlayer = forwardRef(
     }
 
     return (
-      <div className="w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-xl">
+      <div className="w-full max-w-4xl mx-auto aspect-video bg-black rounded-lg sm:rounded-xl overflow-hidden shadow-sm">
         <div ref={containerRef} className="w-full h-full" />
-
-        {!ready && (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <p className="text-white text-sm">Loading YouTube...</p>
-          </div>
-        )}
       </div>
     );
   },
 );
 
-export default YouTubePlayer;
+YoutubePlayer.displayName = "YoutubePlayer";
+
+export default YoutubePlayer;

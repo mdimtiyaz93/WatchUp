@@ -24,6 +24,47 @@ const MeetingRoom = () => {
   const handleLeave = () => {
     navigate("/dashboard");
   };
+  const extractVideoId = (url) => {
+    try {
+      const parsedUrl = new URL(url);
+
+      if (parsedUrl.hostname.includes("youtu.be")) {
+        return parsedUrl.pathname.slice(1);
+      }
+
+      if (parsedUrl.hostname.includes("youtube.com")) {
+        if (parsedUrl.pathname === "/watch") {
+          return parsedUrl.searchParams.get("v");
+        }
+
+        if (parsedUrl.pathname.startsWith("/shorts/")) {
+          return parsedUrl.pathname.split("/")[2];
+        }
+
+        if (parsedUrl.pathname.startsWith("/embed/")) {
+          return parsedUrl.pathname.split("/")[2];
+        }
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  const handleLoadVideo = (e) => {
+    e.preventDefault();
+
+    const id = extractVideoId(videoUrl.trim());
+
+    if (!id) {
+      alert("Please enter a valid YouTube URL");
+      return;
+    }
+
+    setVideoId(id);
+    setIsPlaying(false);
+  };
   return (
     <div className="h-screen w-screen bg-slate-100 text-slate-900 flex flex-col overflow-hidden relative font-sans">
       {" "}
