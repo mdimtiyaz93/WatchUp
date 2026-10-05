@@ -182,8 +182,8 @@ const YoutubePlayer = forwardRef(
 
     if (!videoId) {
       return (
-        <div className="w-full max-w-4xl mx-auto aspect-video bg-black rounded-xl flex items-center justify-center">
-          <p className="text-white text-sm sm:text-base">
+        <div className="w-full max-w-3xl mx-auto aspect-video bg-black rounded-lg sm:rounded-xl flex items-center justify-center overflow-hidden">
+          <p className="text-white text-xs sm:text-sm md:text-base text-center px-4">
             Enter a YouTube video URL
           </p>
         </div>
@@ -191,7 +191,7 @@ const YoutubePlayer = forwardRef(
     }
 
     return (
-      <div className="w-full max-w-4xl mx-auto aspect-video bg-black rounded-lg sm:rounded-xl overflow-hidden shadow-sm">
+      <div className="w-full max-w-3xl mx-auto aspect-video bg-black rounded-lg sm:rounded-xl overflow-hidden shadow-sm">
         <div ref={containerRef} className="w-full h-full" />
       </div>
     );

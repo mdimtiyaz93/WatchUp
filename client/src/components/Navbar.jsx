@@ -4,8 +4,12 @@ import { AstroidIcon, HistoryIcon, LayoutDashboardIcon } from "lucide-react";
 import { UserButton, useUser } from "@clerk/react";
 
 const Navbar = () => {
-  const { isSignedIn, user } = useUser();
+  const { isLoaded, isSignedIn, user } = useUser();
   const location = useLocation();
+
+  if (!isLoaded) {
+    return null;
+  }
 
   const userName =
     user?.fullName ||
