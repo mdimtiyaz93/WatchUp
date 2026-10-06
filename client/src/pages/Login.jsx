@@ -1,4 +1,3 @@
-```jsx
 import { SignIn, SignUp } from "@clerk/react";
 import React from "react";
 
@@ -29,4 +28,3 @@ const Login = ({ mode = "login" }) => {
 };
 
 export default Login;
-```;
