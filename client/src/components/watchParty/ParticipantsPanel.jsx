@@ -60,34 +60,34 @@ const ParticipantsPanel = ({
 
               {/* HOST CONTROLS */}
               {!p.isYou && isHost && p.role !== "Host" && (
-                <div className="flex gap-1 flex-wrap justify-end max-w-[150px]">
+                <div className="flex items-center gap-2 shrink-0">
                   <select
                     value={p.role || "Participant"}
                     onChange={(e) => changeRole(p.id, e.target.value)}
-                    className="text-[9px] border rounded-md px-1 py-1 max-w-full"
+                    className="text-[9px] border rounded-md px-1 py-1"
                   >
                     <option value="Participant">Participant</option>
-
                     <option value="Moderator">Moderator</option>
-
                     <option value="Viewer">Viewer</option>
                   </select>
 
-                  <button
-                    type="button"
-                    onClick={() => transferHost(p.id)}
-                    className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-1 rounded-md cursor-pointer"
-                  >
-                    Host
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => transferHost(p.id)}
+                      className="text-[9px] bg-blue-50 text-blue-600 px-1.5 py-1 rounded-md cursor-pointer"
+                    >
+                      Host
+                    </button>
 
-                  <button
-                    type="button"
-                    onClick={() => removeParticipant(p.id)}
-                    className="text-[9px] bg-red-50 text-red-500 px-1.5 py-1 rounded-md cursor-pointer"
-                  >
-                    Remove
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => removeParticipant(p.id)}
+                      className="text-[9px] bg-red-50 text-red-500 px-1.5 py-1 rounded-md cursor-pointer"
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
@@ -101,5 +101,3 @@ const ParticipantsPanel = ({
     </div>
   );
 };
-
-export default ParticipantsPanel;

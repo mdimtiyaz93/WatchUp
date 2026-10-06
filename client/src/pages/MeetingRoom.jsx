@@ -147,14 +147,6 @@ const MeetingRoom = () => {
       setSocketConnected(false);
     });
 
-    socket.on("participant_removed", ({ message }) => {
-      toast.error(message || "You were removed from the room.");
-
-      navigate("/dashboard", {
-        replace: true,
-      });
-    });
-
     const cleanupEvents = registerMeetingEvents({
       socket,
       meetingId,

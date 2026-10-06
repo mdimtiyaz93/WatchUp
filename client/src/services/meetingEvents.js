@@ -2,7 +2,6 @@ export const registerMeetingEvents = ({
   socket,
   meetingId,
   navigate,
-  userName,
   playerRef,
   videoIdRef,
   isPlayingRef,
