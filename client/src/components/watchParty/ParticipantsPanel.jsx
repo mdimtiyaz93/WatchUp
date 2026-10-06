@@ -101,3 +101,4 @@ const ParticipantsPanel = ({
     </div>
   );
 };
+export default ParticipantsPanel;
